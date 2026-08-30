@@ -178,5 +178,28 @@ TEST_F(EncodingTest, UTF32BE_BOM) {
   SetUpEncoding(&EncodeToUtf32BE, true);
   Run();
 }
+
+// An orphaned UTF-16 high surrogate must decode to a single replacement
+// character, and the code unit after it must still be decoded. Previously the
+// high surrogate was re-emitted as an ill-formed UTF-8 sequence and the
+// following character was dropped.
+TEST(Utf16SurrogateTest, OrphanHighSurrogateKeepsFollowingChar) {
+  auto put = [](std::string& s, int unit) {
+    s += Byte(unit & 0xFF);
+    s += Byte((unit >> 8) & 0xFF);
+  };
+
+  std::string input;
+  put(input, 0xFEFF);  // UTF-16LE BOM
+  put(input, 'x');
+  put(input, ':');
+  put(input, ' ');
+  put(input, 0xD800);  // high surrogate with no trailing low surrogate
+  put(input, 'A');
+
+  std::stringstream stream(input);
+  Node node = Load(stream);
+  EXPECT_EQ(node["x"].as<std::string>(), "\xEF\xBF\xBD" "A");
+}
 }
 }
